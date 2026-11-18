@@ -1,8 +1,11 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using TMPro;
 
 public class PlayCards : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
+    private OcorrenciaManager ocorrenciaManager;
+
     private RectTransform rectTransform;
     private Canvas canvas;
 
@@ -16,12 +19,29 @@ public class PlayCards : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
     private Vector3 escalaOriginal;
     private Vector3 escalaFantasmaOriginal;
 
+    [SerializeField] private TipoEquipe tipoEquipe;
+
+    private bool resolvendo = false;
+
+    private HouseScript casaAtual;
+
+    [SerializeField] private TextMeshProUGUI timerText;
+
+    private OcorrenciaManager OcorrenciaManager;
+
     private void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
         canvas = GetComponentInParent<Canvas>();
 
         escalaOriginal = transform.localScale;
+
+        timerText.gameObject.SetActive(false);
+    }
+
+    private void Start()
+    {
+        ocorrenciaManager = FindObjectOfType<OcorrenciaManager>();
     }
 
     private void Update()
@@ -51,7 +71,7 @@ public class PlayCards : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
     {
         tempoFantasma = 0f;
 
-        if (emMovimento)
+        if (emMovimento || resolvendo)
             return;
 
         transform.SetAsLastSibling();
@@ -113,5 +133,107 @@ public class PlayCards : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
         transform.position = destino;
 
         emMovimento = false;
+
+        VerificarCasa();
     }
+
+    private void VerificarCasa()
+    {
+        HouseScript[] todasCasas =
+            FindObjectsOfType<HouseScript>();
+
+        foreach (HouseScript casa in todasCasas)
+        {
+            float distancia =
+                Vector2.Distance(
+                    transform.position,
+                    casa.transform.position
+                );
+
+            if (distancia < 1f)
+            {
+                bool correto = false;
+
+                switch (casa.tipoAtual)
+                {
+                    case TipoOcorrencia.Incendio:
+
+                        correto =
+                            tipoEquipe ==
+                            TipoEquipe.Bombeiro;
+                        break;
+
+                    case TipoOcorrencia.Crime:
+
+                        correto =
+                            tipoEquipe ==
+                            TipoEquipe.Policia;
+                        break;
+
+                    case TipoOcorrencia.Medica:
+
+                        correto =
+                            tipoEquipe ==
+                            TipoEquipe.Paramedico;
+                        break;
+                }
+
+                if (correto && casa.ocupada)
+                {
+                    StartCoroutine(ResolverOcorrencia(casa));
+                }
+
+                break;
+            }
+        }
+    }
+
+    private System.Collections.IEnumerator ResolverOcorrencia(HouseScript casa)
+    {
+        resolvendo = true;
+        emMovimento = true;
+
+        timerText.gameObject.SetActive(true);
+
+        float tempo = 3f;
+
+        while (tempo > 0f)
+        {
+            timerText.text = tempo.ToString("F2");
+
+            float porcentagem = tempo / 3f;
+
+            timerText.color = Color.Lerp(Color.blue,Color.red,porcentagem);
+            tempo -= Time.deltaTime;
+
+            yield return null;
+        }
+
+        timerText.text = "0.00";
+
+        Destroy(casa.sinalizacaoAtual);
+
+        TipoOcorrencia tipoResolvido = casa.tipoAtual;
+
+        casa.ocupada = false;
+        casa.sinalizacaoAtual = null;
+
+        ocorrenciaManager.RemoverOcorrencia(tipoResolvido);
+
+        GameManager.Instance.RegistrarOcorrenciaResolvida();
+
+        timerText.gameObject.SetActive(false);
+
+        resolvendo = false;
+        emMovimento = false;
+    }
+
+
+}
+
+public enum TipoEquipe
+{
+    Bombeiro,
+    Policia,
+    Paramedico
 }
